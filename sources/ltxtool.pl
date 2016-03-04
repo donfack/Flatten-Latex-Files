@@ -76,6 +76,9 @@ sub init{
 }
 
 sub flattenFile {
+	#Here we define variable for multiple lines.
+	my $line=""; # It can be one or more lines.
+	my $isMultiline=0;
 	# open file
 	my $FHANDLE = gensym();
 	my $opened = 0;
@@ -91,49 +94,59 @@ sub flattenFile {
 		die "Not enough parameters";
 	}
 
-	while ( my $line = ($opened ? <$FHANDLE> : <> ) ) {
-		chomp($line);
+	while ( my $multiline = ($opened ? <$FHANDLE> : <> ) ) {
+
+		
+		chomp($multiline);
 		
 		# remove comments starting a line, remove the whole line
-		if ($line =~ /^\s*(%.*)$/) {
+		if ($multiline =~ /^\s*(%.*)$/) {
 			next;
 		}
 		# remove all other comments except for end of line, protect
-		$line =~ s/^(.*?[^\\])(%.*)/$1/gi;		
+		$multiline =~ s/^(.*?[^\\])(%.*)/$1/gi;		
 		# remove \todo[xxx]{aaa}{bbb}, first and third are optional
-		$line =~ s/\\todo\s*(\[.*?\])?\s*\{.*?\}\s*(\{.*?\})?//gi;
+		$multiline =~ s/\\todo\s*(\[.*?\])?\s*\{.*?\}\s*(\{.*?\})?//gi;
 		
+		$line.=$multiline; #when isMultiline is true, then line is a multiple lines.
 		# order the document
 		if ($line =~ /^(.*)\\documentclass(\[.*\])?\{(.*?)\}(.*)$/) {
 			$firstLine .= $line . "\n";
+			goto INITLINE;
 		}
 		elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
 			$beforeBeginDocumentBool = 0;
 			$afterBeginDocument .= $line . "\n";
+			goto INITLINE;
 		}
 		# check for input statements, just one per line!!
 		elsif ($line =~ /^(.*)\\(input)\s*\{(.*?)\}(.*)$/) {
 			$allBibliographies->insert($3);
 			flattenFile($3);
 			$filelike .= (defined($4)?$4 ."\n" : "\n");
+			goto INITLINE;
 		} 
 		elsif ($line =~ /^(.*)\\(include)\s*\{(.*?)\}(.*)$/) {
 			$allBibliographies->insert($3);
 			flattenFile($3);
 			$filelike .= (defined($4)?$4 ."\n" : "\n");
+			goto INITLINE;
 		}
 		# check for \usepackage[Paketoptionen]{Paketname}, first is optional
 		elsif ($line =~ /^(.*)\\(usepackage)(\[.*?\])?\{(.*?)\}(.*)$/) {
 			$usepackages .= $line . "\n";
+			goto INITLINE;
 		}
 		# check for \bibliography{Name}
 		elsif ($line =~ /^(.*)\\(bibliography)\{(.*?)\}(.*)$/) {
 			# merge single bibliographies into one
 			#$allBibliographies->insert($3);
+			goto INITLINE;
 		}
 		# check for \bibliographystyle{Name}
 		elsif ($line =~ /^(.*)\\(bibliographystyle)\{(.*?)\}(.*)$/) {
 			$bibliographyStyle .= $line . "\n";
+			goto INITLINE;
 		}
 		# check for \(re)newcommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
 
@@ -141,36 +154,56 @@ sub flattenFile {
 			$commands .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
+			goto INITMULTILINE;
 		}
 		# check for \providecommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
 		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/) {
 			$providecommands .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
+			goto INITMULTILINE;
 		}
 		# check for \(re)newenvironment(*){Name}[Anzahl]{Vorher}{Nachher}, second and (...) arguments are optional
 		elsif ($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/) {
 			$environement .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
+			goto INITMULTILINE;
 		}
 		# check for \(re)?newtheorem{Name}[Zählung]{Bezeichnung}[Gliederung] second and forth is optional
 		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/) {
 			$theorems .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
+			goto INITMULTILINE;
 		} 
 		elsif ($line =~ /^(.*)\\(end)\s*\{document\}(.*)$/) {
 			$lastLine .= $line . "\n";
+			goto INITLINE;
 		}
 		# no special line, just print it
 		else {
 			if ($beforeBeginDocumentBool){
+				print "Into Preambule $isMultiline  \n";
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment/ or $isMultiline){
+					$isMultiline=1;
+					print "This is multi Line Macro $line  \n";
+					goto INITMULTILINE;
+					print "NEVER PRINT  \n";
+				}
 				$beforeBeginDocument .= $line ."\n";
+				goto INITLINE;
 			} else{
 				$afterBeginDocument .= $line ."\n";
+				goto INITLINE;
 			}		
 		}
+		INITMULTILINE:
+			$isMultiline=0;
+			$line="";
+			next;
+		INITLINE:
+			$line="";
 	}
 }
 
