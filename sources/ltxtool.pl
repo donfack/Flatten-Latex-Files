@@ -93,7 +93,7 @@ sub flattenFile {
 	} else {
 		die "Not enough parameters";
 	}
-
+	
 	while ( my $multiline = ($opened ? <$FHANDLE> : <> ) ) {
 
 		
@@ -168,6 +168,8 @@ sub flattenFile {
 			$environement .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
+			print "Into Macro $isMultiline  \n";
+			print "Into Newenv $line  \n";
 			goto INITMULTILINE;
 		}
 		# check for \(re)?newtheorem{Name}[Zählung]{Bezeichnung}[Gliederung] second and forth is optional
@@ -179,16 +181,18 @@ sub flattenFile {
 		} 
 		elsif ($line =~ /^(.*)\\(end)\s*\{document\}(.*)$/) {
 			$lastLine .= $line . "\n";
-			goto INITLINE;
+			goto ENDflattenFile;
 		}
 		# no special line, just print it
 		else {
 			if ($beforeBeginDocumentBool){
 				print "Into Preambule $isMultiline  \n";
-				if($line=~/newcommand|providecommand|newtheorem|newenvironment/ or $isMultiline){
+				print "Into Preambule $line  \n";
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
 					$isMultiline=1;
 					print "This is multi Line Macro $line  \n";
-					goto INITMULTILINE;
+					print "Is multi line? $isMultiline  \n \n";
+					next;
 					print "NEVER PRINT  \n";
 				}
 				$beforeBeginDocument .= $line ."\n";
@@ -199,12 +203,15 @@ sub flattenFile {
 			}		
 		}
 		INITMULTILINE:
+			print "test \n";
 			$isMultiline=0;
 			$line="";
 			next;
 		INITLINE:
 			$line="";
+			next;
 	}
+	ENDflattenFile:
 }
 
 sub mergeBib {
