@@ -150,30 +150,32 @@ sub flattenFile {
 		}
 		# check for \(re)newcommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
 
-		elsif ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/) {
+		elsif ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
 			$commands .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
+			if($isMultiline){
+				print "\n The Macro is $line  \n";
+			}
 			goto INITMULTILINE;
 		}
 		# check for \providecommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
-		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/) {
+		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
 			$providecommands .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}
 		# check for \(re)newenvironment(*){Name}[Anzahl]{Vorher}{Nachher}, second and (...) arguments are optional
-		elsif ($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/) {
+		elsif ($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
 			$environement .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
-			print "Into Macro $isMultiline  \n";
-			print "Into Newenv $line  \n";
+			print "\n The Macro is $line  \n";
 			goto INITMULTILINE;
 		}
 		# check for \(re)?newtheorem{Name}[Zählung]{Bezeichnung}[Gliederung] second and forth is optional
-		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/) {
+		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/ism) {
 			$theorems .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
@@ -187,13 +189,12 @@ sub flattenFile {
 		else {
 			if ($beforeBeginDocumentBool){
 				print "Into Preambule $isMultiline  \n";
-				print "Into Preambule $line  \n";
 				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
 					$isMultiline=1;
-					print "This is multi Line Macro $line  \n";
-					print "Is multi line? $isMultiline  \n \n";
+					$line.="\n";
+					print "in Mulitline Macro \n$line \n";
+					print $isMultiline . "\n \n";
 					next;
-					print "NEVER PRINT  \n";
 				}
 				$beforeBeginDocument .= $line ."\n";
 				goto INITLINE;
@@ -203,7 +204,6 @@ sub flattenFile {
 			}		
 		}
 		INITMULTILINE:
-			print "test \n";
 			$isMultiline=0;
 			$line="";
 			next;
