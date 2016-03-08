@@ -154,9 +154,6 @@ sub flattenFile {
 			$commands .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
-			if($isMultiline){
-				print "\n The Macro is $line  \n";
-			}
 			goto INITMULTILINE;
 		}
 		# check for \providecommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
@@ -171,7 +168,6 @@ sub flattenFile {
 			$environement .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
-			print "\n The Macro is $line  \n";
 			goto INITMULTILINE;
 		}
 		# check for \(re)?newtheorem{Name}[Zählung]{Bezeichnung}[Gliederung] second and forth is optional
@@ -188,12 +184,9 @@ sub flattenFile {
 		# no special line, just print it
 		else {
 			if ($beforeBeginDocumentBool){
-				print "Into Preambule $isMultiline  \n";
 				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
 					$isMultiline=1;
 					$line.="\n";
-					print "in Mulitline Macro \n$line \n";
-					print $isMultiline . "\n \n";
 					next;
 				}
 				$beforeBeginDocument .= $line ."\n";
@@ -248,55 +241,16 @@ sub sortFile {
 
 sub removeMacros {
 	my $newFile = "";
+	#Here we define variable for multiple lines.
+	my $line=""; # It can be one or more lines.
+	my $isMultiline=0; #It is 1 when there are more lines.
+	$beforeBeginDocumentBool=1;
 	# iterate again to check whether a macro was used inside the deocument or in another macro
 	my @lines = split /\n/, $filelike;
-	foreach my $line (@lines) {
-		chomp($line);
-		if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/){
-			my $name = $3;
-			my $def = $5;
-			
-			while ($def =~ /(\\\w+\w*)/gi) { 
-				if ($allMacros->has($1)){					
-					$dependencyGraph->add_edge($1,$name);
-				}
-			}
-		}
-		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/) {
-			my $name = $2;
-			my $def = $4;
-			
-			while ($def =~ /(\\\w+\w*)/gi) { 
-				if ($allMacros->has($1)){					
-					$dependencyGraph->add_edge($1,$name);
-				}
-			}
-		}
-		elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/){
-			my $name = $3;
-			my $defBefore = $5;
-			my $defAfter = $6;
-			while ($defBefore =~ /(\\\w+\w*)/gi) { 
-				if ($allMacros->has($1)){					
-					$dependencyGraph->add_edge($1,$name);
-				}
-			}
-			while ($defAfter =~ /(\\\w+\w*)/gi) { 
-				if ($allMacros->has($1)){					
-					$dependencyGraph->add_edge($1,$name);
-				}
-			}
-		}
-		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/) {
-			my $name = $3;
-			my $def = $5;
-			while ($def =~ /(\\\w+\w*)/gi) { 
-				if ($allMacros->has($1)){					
-					$dependencyGraph->add_edge($1,$name);
-				}
-			}
-		}
-		else{
+	foreach my $multiline (@lines) {
+		chomp($multiline);
+		$line.=$multiline; #when isMultiline is true, then line is a multiple lines.
+		if (not $beforeBeginDocumentBool){
 			# for each occurance of a macro: check whether it was defined in the preamble
 			if ($line =~ /(.*?)(\\\w+)(.*?)$/) { 
 				while($line =~ /(\\[a-zA-Z]+)/ig){
@@ -313,7 +267,93 @@ sub removeMacros {
 					}
 				}
 			}
+			goto INITLINE;
+		}else{
+			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism){
+				my $name = $3;
+				my $def = $5;
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $def = $4;
+				
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism){
+				my $name = $3;
+				my $defBefore = $5;
+				my $defAfter = $6;
+				while ($defBefore =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				while ($defAfter =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/ism) {
+				my $name = $3;
+				my $def = $5;
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
+				$beforeBeginDocumentBool = 0;
+				goto INITLINE;
+			}
+			else{
+				
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
+					$isMultiline=1;
+					$line.="\n";
+					next;
+				}else{
+					# for each occurance of a macro: check whether it was defined in the preamble
+					if ($line =~ /(.*?)(\\\w+)(.*?)$/) { 
+						while($line =~ /(\\[a-zA-Z]+)/ig){
+							if ($allMacros->has($1)) {
+								$dependencyGraph->add_edge($1,'text');
+							}
+						}
+					}
+					# for each occurance of a macro environement or theorem: check whether it was defined in the preamble
+					if ($line =~ /(.*?)\\begin\s*\{([a-zA-Z*]+)\}(.*?)$/) { 
+						while($line =~ /\\begin\s*\{([a-zA-Z*]+)\}/ig){
+							if ($allMacros->has($1)) {
+								$dependencyGraph->add_edge($1,'text');
+							}
+						}
+					}
+					goto INITLINE;
+				}
+			}
 		}
+		INITMULTILINE:
+			$isMultiline=0;
+			$line="";
+			next;
+		INITLINE:
+			$line="";
+			next;
 	}
 	# remove unused macros
 	# if there is no path between the 'text' node and the macro-node, the macro is never used
@@ -325,47 +365,84 @@ sub removeMacros {
 			$usedMacros->delete($e);
 		}
 	}
-
+	#Here we define variable for multiple lines.
+	$line=""; # It can be one or more lines.
+	$isMultiline=0; #It is 1 when there are more lines.
+	$beforeBeginDocumentBool = 1;
 	# remove all unused macros
 	# remove empty lines
 	my $prev_empty = 0;
 	my $this_empty = 0;
-	foreach my $line (@lines) {
-		chomp($line);
-		
-		if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/){
-			if ($usedMacros->has($3)) {
-				$newFile .= $line . "\n";
-				$this_empty = 0;
-			}
-		}
-		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/) {
-			if ($usedMacros->has($2)) {
-				$newFile .= $line . "\n";
-				$this_empty = 0;
-			}
-		}
-		elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/){
-			if ($usedMacros->has($3)) {
-				$newFile .= $line . "\n";
-				$this_empty = 0;
-			}
-		}
-		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/) {
-			if ($usedMacros->has($3)) {
-				$newFile .= $line . "\n";
-				$this_empty = 0;
-			}
-		}
-		else {
+	foreach my $multiline (@lines) {
+		chomp($multiline);
+		$line.=$multiline; #when isMultiline is true, then line is a multiple lines.
+		if(not $beforeBeginDocumentBool){
 			$this_empty = ($line =~ /^\s*$/);
 			if ($prev_empty && $this_empty) {
 				$this_empty = $prev_empty;
 			} else {
 				$newFile .= $line . "\n";
 			}
+			goto INITLINE;
 		}
-		$prev_empty = $this_empty;
+		else{
+			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism){
+				if ($usedMacros->has($3)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism){
+				if ($usedMacros->has($3)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/ism) {
+				if ($usedMacros->has($3)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
+				$beforeBeginDocumentBool = 0;
+				goto INITLINE;
+			}
+			else{
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
+					$isMultiline=1;
+					$line.="\n";
+					next;
+				}else{
+					$this_empty = ($line =~ /^\s*$/);
+					if ($prev_empty && $this_empty) {
+						$this_empty = $prev_empty;
+					} else {
+						$newFile .= $line . "\n";
+					}
+				}
+				goto INITLINE;
+			}
+		}
+		INITMULTILINE:
+			$isMultiline=0;
+			$line="";
+			$prev_empty = $this_empty;
+			next;
+		INITLINE:
+			$line="";
+			$prev_empty = $this_empty;
+			next;
 	}
 	return $newFile;
 }
