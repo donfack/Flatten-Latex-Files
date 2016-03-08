@@ -20,10 +20,19 @@ my $beforeBeginDocument = "";
 my $afterBeginDocument = "";
 my $lastLine = "";
 my $usepackages = "";
+############## List of macros. This is no exhausive and one can  complete
 my $commands = "";
 my $providecommands="";
 my $environement = "";
 my $theorems = "";
+my $savebox="";
+my $length="";
+my $font="";
+my $counter="";
+my $glossaryentry="";
+my $acronym="";
+
+############## End list of macros
 my $bibliographyStyle = "";
 my $allBibliographies = Set::Scalar->new;
 my $allMacros = Set::Scalar->new;
@@ -176,7 +185,49 @@ sub flattenFile {
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
 			goto INITMULTILINE;
-		} 
+		}
+		# check for \(re)?newsavebox{\Name}
+		elsif ($line =~ /^(.*)\\newsavebox\*?\s*\{(.*?)\}(.*)$/ism) {
+			$savebox .= $line . "\n";
+			$dependencyGraph->add_edge($root,$2);
+			$allMacros->insert($2);
+			goto INITMULTILINE;
+		}
+		# check for \(re)?newlength{Name}
+		elsif ($line =~ /^(.*)\\newlength\*?\s*\{(.*?)\}(.*)$/ism) {
+			$length .= $line . "\n";
+			$dependencyGraph->add_edge($root,$2);
+			$allMacros->insert($2);
+			goto INITMULTILINE;
+		}
+		# check for \newfont(*){\cmd}{font description}
+		elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			$font .= $line . "\n";
+			$dependencyGraph->add_edge($root,$2);
+			$allMacros->insert($2);
+			goto INITMULTILINE;
+		}
+		# check for \newglossaryentries(*){label}{setting}
+		elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			$glossaryentry .= $line . "\n";
+			$dependencyGraph->add_edge($root,$2);
+			$allMacros->insert($2);
+			goto INITMULTILINE;
+		}
+		# check for \longnewglossaryentries(*){label}{setting}{description}
+		elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+			$glossaryentry .= $line . "\n";
+			$dependencyGraph->add_edge($root,$2);
+			$allMacros->insert($2);
+			goto INITMULTILINE;
+		}		
+		# check for \newacronym(*){label}{short}{long}
+		elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+			$acronym .= $line . "\n";
+			$dependencyGraph->add_edge($root,$2);
+			$allMacros->insert($2);
+			goto INITMULTILINE;
+		}
 		elsif ($line =~ /^(.*)\\(end)\s*\{document\}(.*)$/) {
 			$lastLine .= $line . "\n";
 			goto ENDflattenFile;
@@ -184,7 +235,7 @@ sub flattenFile {
 		# no special line, just print it
 		else {
 			if ($beforeBeginDocumentBool){
-				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment|newsavebox|newlength|newfont|newglossaryentry|longnewglossaryentry|newacronym/i or $isMultiline){
 					$isMultiline=1;
 					$line.="\n";
 					next;
@@ -228,6 +279,18 @@ sub sortFile {
 	$string .= $environement ."\n";
 	$string .= "% theorems" ."\n";
 	$string .= $theorems ."\n";
+	$string .= "% Savebox" ."\n";
+	$string .= $savebox ."\n";
+	$string .= "% lengths" ."\n";
+	$string .= $length ."\n";
+	$string .= "% fonts" ."\n";
+	$string .= $font ."\n";
+	$string .= "% counters" ."\n";
+	$string .= $counter ."\n";
+	$string .= "% glossaryentries" ."\n";
+	$string .= $glossaryentry ."\n";
+	$string .= "% acronyms" ."\n";
+	$string .= $acronym ."\n";
 	$string .= "% other" ."\n";
 	$string .= $beforeBeginDocument ."\n";
 	$string .= "% begin document" ."\n";
@@ -247,11 +310,14 @@ sub removeMacros {
 	$beforeBeginDocumentBool=1;
 	# iterate again to check whether a macro was used inside the deocument or in another macro
 	my @lines = split /\n/, $filelike;
+	
+	#my $counter=0;
 	foreach my $multiline (@lines) {
+		#$counter++;
 		chomp($multiline);
 		$line.=$multiline; #when isMultiline is true, then line is a multiple lines.
 		if (not $beforeBeginDocumentBool){
-			# for each occurance of a macro: check whether it was defined in the preamble
+			# for each occurance of a macro: check whether it was be used in the text
 			if ($line =~ /(.*?)(\\\w+)(.*?)$/) { 
 				while($line =~ /(\\[a-zA-Z]+)/ig){
 					if ($allMacros->has($1)) {
@@ -259,7 +325,7 @@ sub removeMacros {
 					}
 				}
 			}
-			# for each occurance of a macro environement or theorem: check whether it was defined in the preamble
+			# for each occurance of a macro environement or theorem: check whether it was be used in the text
 			if ($line =~ /(.*?)\\begin\s*\{([a-zA-Z*]+)\}(.*?)$/) { 
 				while($line =~ /\\begin\s*\{([a-zA-Z*]+)\}/ig){
 					if ($allMacros->has($1)) {
@@ -267,8 +333,18 @@ sub removeMacros {
 					}
 				}
 			}
+			# for each occurance of a macro glassary or acronym: check whether it was be used in the text
+			if ($line =~ /(.*?)(gls|Gls|glspl|Glspl|glssymbol)\*?\{(\w+\w*)\}(.*?)$/) { 
+				while ($line =~ /(gls|Gls|glspl|Glspl|glssymbol)\*?\{(\w+\w*)\}/gi) { 
+					if ($allMacros->has($2)){					
+						$dependencyGraph->add_edge($2,'text');
+					}
+				}
+			}
+
 			goto INITLINE;
 		}else{
+
 			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism){
 				my $name = $3;
 				my $def = $5;
@@ -316,17 +392,98 @@ sub removeMacros {
 				}
 				goto INITMULTILINE;
 			}
+			# check for \savebox{\Name}[width][position]{content}
+			elsif ($line =~ /^(.*)\\savebox\*?\s*\{(.*?)\}\s*(\[.*\])?\s*(\[.*\])?\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $def = $5;
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			# check for \sbox{\Name}{content}
+			elsif ($line =~ /^(.*)\\sbox\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $def = $3;
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			# check for \newfont(*){\cmd}{font description}
+			elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $def = $3;
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
+			# check for \newglossaryentries(*){label}{setting}
+			elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $def = $3;
+				while ($def =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;				
+			}
+			# check for \longnewglossaryentries(*){label}{setting}{description}
+			elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $defSetting = $3;
+				my $defDescription=$4;
+				while ($defSetting =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				
+				while ($defDescription =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}		
+			# check for \newacronym(*){label}{short}{long}
+			elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+				my $name = $2;
+				my $defShort = $3;
+				my $defLong=$4;
+				while ($defShort =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				
+				while ($defLong =~ /(\\\w+\w*)/gi) { 
+					if ($allMacros->has($1)){					
+						$dependencyGraph->add_edge($1,$name);
+					}
+				}
+				goto INITMULTILINE;
+			}
 			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
 				$beforeBeginDocumentBool = 0;
 				goto INITLINE;
 			}
 			else{
-				
-				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
+
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment|newsavebox|newlength|newfont|newglossaryentry|longnewglossaryentry|newacronym/i or $isMultiline){
 					$isMultiline=1;
 					$line.="\n";
 					next;
 				}else{
+
 					# for each occurance of a macro: check whether it was defined in the preamble
 					if ($line =~ /(.*?)(\\\w+)(.*?)$/) { 
 						while($line =~ /(\\[a-zA-Z]+)/ig){
@@ -414,12 +571,60 @@ sub removeMacros {
 				}
 				goto INITMULTILINE;
 			}
+			# check for \(re)?newsavebox{\Name}
+			elsif ($line =~ /^(.*)\\newsavebox\*?\s*\{(.*?)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			# check for \(re)?newlength{Name}
+			elsif ($line =~ /^(.*)\\newlength\*?\s*\{(.*?)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			# check for \newfont(*){\cmd}{font description}
+			elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			# check for \newglossaryentries(*){label}{setting}
+			elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}
+			# check for \longnewglossaryentries(*){label}{setting}{description}
+			elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}		
+			# check for \newacronym(*){label}{short}{long}
+			elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+				if ($usedMacros->has($2)) {
+					$newFile .= $line . "\n";
+					$this_empty = 0;
+				}
+				goto INITMULTILINE;
+			}			
 			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
 				$beforeBeginDocumentBool = 0;
 				goto INITLINE;
 			}
 			else{
-				if($line=~/newcommand|providecommand|newtheorem|newenvironment/i or $isMultiline){
+				if($line=~/newcommand|providecommand|newtheorem|newenvironment|newsavebox|newlength|newfont|newglossaryentry|longnewglossaryentry|newacronym/i or $isMultiline){
 					$isMultiline=1;
 					$line.="\n";
 					next;
