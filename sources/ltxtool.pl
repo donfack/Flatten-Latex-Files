@@ -621,6 +621,7 @@ sub removeMacros {
 			}			
 			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
 				$beforeBeginDocumentBool = 0;
+				$newFile .= $line . "\n";
 				goto INITLINE;
 			}
 			else{
