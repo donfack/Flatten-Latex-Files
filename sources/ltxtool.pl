@@ -39,7 +39,9 @@ my $allMacros = Set::Scalar->new;
 my $dependencyGraph = Graph->new;
 my $root = 'root';
 my $file = "";
-
+############ zahlerAncolla #########
+my $totalAUF=0;
+my $totalZU=0;
 # Function call
 init();
 flattenFile($rootFile);
@@ -85,6 +87,7 @@ sub init{
 }
 
 sub flattenFile {
+	my $zahler=0;
 	#Here we define variable for multiple lines.
 	my $line=""; # It can be one or more lines.
 	my $isMultiline=0;
@@ -104,8 +107,7 @@ sub flattenFile {
 	}
 	
 	while ( my $multiline = ($opened ? <$FHANDLE> : <> ) ) {
-
-		
+		$zahler++;
 		chomp($multiline);
 		
 		# remove comments starting a line, remove the whole line
@@ -159,76 +161,97 @@ sub flattenFile {
 		}
 		# check for \(re)newcommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
 
-		elsif ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
-			$commands .= $line . "\n";
-			$dependencyGraph->add_edge($root,$3);
-			$allMacros->insert($3);
-			goto INITMULTILINE;
+		#elsif ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*$/ism) {
+			$totalAUF= $5=~tr/\{/\{/;
+			$totalZU= $5=~tr/\}/\}/;
+			print "1      $3    =  $line \n $totalAUF    $totalZU\n ";	
+			if($totalAUF==$totalZU){
+				print "2      $3    =  $line \n\n ";					
+				$commands .= $line . "\n";
+				$dependencyGraph->add_edge($root,$3);
+				$allMacros->insert($3);
+				goto INITMULTILINE;
+			}else{
+				goto WEITERLINE;
+			}
 		}
 		# check for \providecommand(*){\Name}[Anzahl]{Definition}, second and (...) arguments are optional
-		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
-			$providecommands .= $line . "\n";
-			$dependencyGraph->add_edge($root,$2);
-			$allMacros->insert($2);
-			goto INITMULTILINE;
+		elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*$/ism) {
+			$totalAUF= $4=~tr/\{/\{/;
+			$totalZU= $4=~tr/\}/\}/;
+			if($totalAUF==$totalZU){
+				$providecommands .= $line . "\n";
+				$dependencyGraph->add_edge($root,$2);
+				$allMacros->insert($2);
+				goto INITMULTILINE;
+			}else{
+				goto WEITERLINE;
+			}
 		}
 		# check for \(re)newenvironment(*){Name}[Anzahl]{Vorher}{Nachher}, second and (...) arguments are optional
-		elsif ($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
-			$environement .= $line . "\n";
-			$dependencyGraph->add_edge($root,$3);
-			$allMacros->insert($3);
-			goto INITMULTILINE;
+		elsif ($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
+			$totalAUF= ($5=~tr/\{/\{/)==($5=~tr/\}/\}/);
+			$totalZU= ($6=~tr/\{/\{/)==($6=~tr/\}/\}/);
+			if($totalAUF and $totalZU){
+				$environement .= $line . "\n";
+				$dependencyGraph->add_edge($root,$3);
+				$allMacros->insert($3);
+				goto INITMULTILINE;
+			}else{
+				goto WEITERLINE;
+			}			
 		}
 		# check for \(re)?newtheorem{Name}[Zählung]{Bezeichnung}[Gliederung] second and forth is optional
-		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*\])?\s*$/ism) {
 			$theorems .= $line . "\n";
 			$dependencyGraph->add_edge($root,$3);
 			$allMacros->insert($3);
 			goto INITMULTILINE;
 		}
 		# check for \(re)?newsavebox{\Name}
-		elsif ($line =~ /^(.*)\\newsavebox\*?\s*\{(.*?)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\newsavebox\*?\s*\{(.*?)\}\s*$/ism) {
 			$savebox .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}
 		# check for \(re)?newlength{Name}
-		elsif ($line =~ /^(.*)\\newlength\*?\s*\{(.*?)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\newlength\*?\s*\{(.*?)\}\s*$/ism) {
 			$length .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}
 		# check for \newfont(*){\cmd}{font description}
-		elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 			$font .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}
 		# check for \newglossaryentries(*){label}{setting}
-		elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 			$glossaryentry .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}
 		# check for \longnewglossaryentries(*){label}{setting}{description}
-		elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
 			$glossaryentry .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}		
 		# check for \newacronym(*){label}{short}{long}
-		elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+		elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
 			$acronym .= $line . "\n";
 			$dependencyGraph->add_edge($root,$2);
 			$allMacros->insert($2);
 			goto INITMULTILINE;
 		}
-		elsif ($line =~ /^(.*)\\(end)\s*\{document\}(.*)$/) {
+		elsif ($line =~ /^(.*)\\(end)\s*\{document\}\s*$/) {
 			$lastLine .= $line . "\n";
 			goto ENDflattenFile;
 		}
@@ -237,8 +260,7 @@ sub flattenFile {
 			if ($beforeBeginDocumentBool){
 				if($line=~/newcommand|providecommand|newtheorem|newenvironment|newsavebox|newlength|newfont|newglossaryentry|longnewglossaryentry|newacronym/i or $isMultiline){
 					$isMultiline=1;
-					$line.="\n";
-					next;
+					goto WEITERLINE;
 				}
 				$beforeBeginDocument .= $line ."\n";
 				goto INITLINE;
@@ -253,6 +275,9 @@ sub flattenFile {
 			next;
 		INITLINE:
 			$line="";
+			next;
+		WEITERLINE:
+			$line.="\n";
 			next;
 	}
 	ENDflattenFile:
@@ -301,9 +326,10 @@ sub sortFile {
 	$string .= $lastLine ."\n";
 	return $string;
 }
-
 sub removeMacros {
 	my $newFile = "";
+	my $zahler=0;
+	
 	#Here we define variable for multiple lines.
 	my $line=""; # It can be one or more lines.
 	my $isMultiline=0; #It is 1 when there are more lines.
@@ -313,7 +339,7 @@ sub removeMacros {
 	
 	#my $counter=0;
 	foreach my $multiline (@lines) {
-		#$counter++;
+		$zahler++;
 		chomp($multiline);
 		$line.=$multiline; #when isMultiline is true, then line is a multiple lines.
 		if (not $beforeBeginDocumentBool){
@@ -345,44 +371,63 @@ sub removeMacros {
 			goto INITLINE;
 		}else{
 
-			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism){
-				my $name = $3;
-				my $def = $5;
-				while ($def =~ /(\\\w+\w*)/gi) { 
-					if ($allMacros->has($1)){					
-						$dependencyGraph->add_edge($1,$name);
+			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*$/ism) {
+				$totalAUF= $5=~tr/\{/\{/;
+				$totalZU= $5=~tr/\}/\}/;
+				if($totalAUF==$totalZU){
+					my $name = $3;
+					my $def = $5;
+					while ($def =~ /(\\\w+\w*)/gi) { 
+						if ($allMacros->has($1)){					
+							$dependencyGraph->add_edge($1,$name);
+						}
 					}
+					goto INITMULTILINE;
+				}else{
+					goto WEITERLINE;
 				}
-				goto INITMULTILINE;
 			}
-			elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
-				my $name = $2;
-				my $def = $4;
+			elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*$/ism) {
+				$totalAUF= $4=~tr/\{/\{/;
+				$totalZU= $4=~tr/\}/\}/;
+				if($totalAUF==$totalZU){
+					my $name = $2;
+					my $def = $4;
+					while ($def =~ /(\\\w+\w*)/gi) { 
+						if ($allMacros->has($1)){					
+							$dependencyGraph->add_edge($1,$name);
+						}
+					}
+					goto INITMULTILINE;
+				}else{
+					goto WEITERLINE;
+				}
+			}
+			elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
+				$totalAUF= ($5=~tr/\{/\{/)==($5=~tr/\}/\}/);
+				$totalZU= ($6=~tr/\{/\{/)==($6=~tr/\}/\}/);
+				if($totalAUF and $totalZU){
+					my $name = $3;
+					my $defBefore = $5;
+					my $defAfter = $6;
+					while ($defBefore =~ /(\\\w+\w*)/gi) { 
+						if ($allMacros->has($1)){					
+							$dependencyGraph->add_edge($1,$name);
+						}
+					}
+					while ($defAfter =~ /(\\\w+\w*)/gi) { 
+						if ($allMacros->has($1)){					
+							$dependencyGraph->add_edge($1,$name);
+						}
+					}
+					goto INITMULTILINE;
+				}else{
+					goto WEITERLINE;
+				}
 				
-				while ($def =~ /(\\\w+\w*)/gi) { 
-					if ($allMacros->has($1)){					
-						$dependencyGraph->add_edge($1,$name);
-					}
-				}
-				goto INITMULTILINE;
+
 			}
-			elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism){
-				my $name = $3;
-				my $defBefore = $5;
-				my $defAfter = $6;
-				while ($defBefore =~ /(\\\w+\w*)/gi) { 
-					if ($allMacros->has($1)){					
-						$dependencyGraph->add_edge($1,$name);
-					}
-				}
-				while ($defAfter =~ /(\\\w+\w*)/gi) { 
-					if ($allMacros->has($1)){					
-						$dependencyGraph->add_edge($1,$name);
-					}
-				}
-				goto INITMULTILINE;
-			}
-			elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?\s*$/ism) {
 				my $name = $3;
 				my $def = $5;
 				while ($def =~ /(\\\w+\w*)/gi) { 
@@ -393,7 +438,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \savebox{\Name}[width][position]{content}
-			elsif ($line =~ /^(.*)\\savebox\*?\s*\{(.*?)\}\s*(\[.*\])?\s*(\[.*\])?\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\savebox\*?\s*\{(.*?)\}\s*(\[.*\])?\s*(\[.*\])?\s*\{(.*)\}\s*$/ism) {
 				my $name = $2;
 				my $def = $5;
 				while ($def =~ /(\\\w+\w*)/gi) { 
@@ -404,7 +449,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \sbox{\Name}{content}
-			elsif ($line =~ /^(.*)\\sbox\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\sbox\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 				my $name = $2;
 				my $def = $3;
 				while ($def =~ /(\\\w+\w*)/gi) { 
@@ -415,7 +460,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \newfont(*){\cmd}{font description}
-			elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 				my $name = $2;
 				my $def = $3;
 				while ($def =~ /(\\\w+\w*)/gi) { 
@@ -426,7 +471,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \newglossaryentries(*){label}{setting}
-			elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 				my $name = $2;
 				my $def = $3;
 				while ($def =~ /(\\\w+\w*)/gi) { 
@@ -437,7 +482,7 @@ sub removeMacros {
 				goto INITMULTILINE;				
 			}
 			# check for \longnewglossaryentries(*){label}{setting}{description}
-			elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
 				my $name = $2;
 				my $defSetting = $3;
 				my $defDescription=$4;
@@ -455,7 +500,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}		
 			# check for \newacronym(*){label}{short}{long}
-			elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
 				my $name = $2;
 				my $defShort = $3;
 				my $defLong=$4;
@@ -472,7 +517,7 @@ sub removeMacros {
 				}
 				goto INITMULTILINE;
 			}
-			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
+			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}\s*$/) {
 				$beforeBeginDocumentBool = 0;
 				goto INITLINE;
 			}
@@ -511,6 +556,9 @@ sub removeMacros {
 		INITLINE:
 			$line="";
 			next;
+		WEITERLINE:
+			$line.="\n";
+			next;
 	}
 	# remove unused macros
 	# if there is no path between the 'text' node and the macro-node, the macro is never used
@@ -543,28 +591,48 @@ sub removeMacros {
 			goto INITLINE;
 		}
 		else{
-			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism){
-				if ($usedMacros->has($3)) {
-					$newFile .= $line . "\n";
-					$this_empty = 0;
+			if ($line =~ /^(.*)\\(re)?newcommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*$/ism) {
+				$totalAUF= $5=~tr/\{/\{/;
+				$totalZU= $5=~tr/\}/\}/;
+				if($totalAUF==$totalZU){
+					#print "True Macro $line \n $totalAUF $totalZU  \n";					
+					if ($usedMacros->has($3)) {
+						#print "True Macro $line \n";
+						$newFile .= $line . "\n";
+						$this_empty = 0;
+					}
+					goto INITMULTILINE;
+				}else{
+					goto WEITERLINE;
 				}
-				goto INITMULTILINE;
 			}
-			elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}(.*)$/ism) {
-				if ($usedMacros->has($2)) {
-					$newFile .= $line . "\n";
-					$this_empty = 0;
+			elsif ($line =~ /^(.*)\\providecommand\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*$/ism) {
+				$totalAUF= $5=~tr/\{/\{/;
+				$totalZU= $5=~tr/\}/\}/;
+				if($totalAUF==$totalZU){
+					if ($usedMacros->has($2)) {
+						$newFile .= $line . "\n";
+						$this_empty = 0;
+					}
+					goto INITMULTILINE;
+				}else{
+					goto WEITERLINE;
 				}
-				goto INITMULTILINE;
 			}
-			elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism){
-				if ($usedMacros->has($3)) {
-					$newFile .= $line . "\n";
-					$this_empty = 0;
+			elsif($line =~ /^(.*)\\(re)?newenvironment\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
+				$totalAUF= ($5=~tr/\{/\{/)==($5=~tr/\}/\}/);
+				$totalZU= ($6=~tr/\{/\{/)==($6=~tr/\}/\}/);
+				if($totalAUF and $totalZU){
+					if ($usedMacros->has($3)) {
+						$newFile .= $line . "\n";
+						$this_empty = 0;
+					}
+					goto INITMULTILINE;
+				}else{
+					goto WEITERLINE;
 				}
-				goto INITMULTILINE;
 			}
-			elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\(re)?newtheorem\*?\s*\{(.*?)\}\s*(\[.*?\])?\s*\{(.*)\}\s*(\[.*?\])?\s*$/ism) {
 				if ($usedMacros->has($3)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
@@ -572,7 +640,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \(re)?newsavebox{\Name}
-			elsif ($line =~ /^(.*)\\newsavebox\*?\s*\{(.*?)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newsavebox\*?\s*\{(.*?)\}\s*$/ism) {
 				if ($usedMacros->has($2)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
@@ -580,7 +648,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \(re)?newlength{Name}
-			elsif ($line =~ /^(.*)\\newlength\*?\s*\{(.*?)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newlength\*?\s*\{(.*?)\}\s*$/ism) {
 				if ($usedMacros->has($2)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
@@ -588,7 +656,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \newfont(*){\cmd}{font description}
-			elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newfont\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 				if ($usedMacros->has($2)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
@@ -596,7 +664,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \newglossaryentries(*){label}{setting}
-			elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*$/ism) {
 				if ($usedMacros->has($2)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
@@ -604,7 +672,7 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}
 			# check for \longnewglossaryentries(*){label}{setting}{description}
-			elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\longnewglossaryentry\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
 				if ($usedMacros->has($2)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
@@ -612,14 +680,14 @@ sub removeMacros {
 				goto INITMULTILINE;
 			}		
 			# check for \newacronym(*){label}{short}{long}
-			elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}(.*)$/ism) {
+			elsif ($line =~ /^(.*)\\newacronym\*?\s*\{(.*?)\}\s*\{(.*)\}\s*\{(.*)\}\s*$/ism) {
 				if ($usedMacros->has($2)) {
 					$newFile .= $line . "\n";
 					$this_empty = 0;
 				}
 				goto INITMULTILINE;
 			}			
-			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}(.*)$/) {
+			elsif ($line =~ /^(.*)\\(begin)\s*\{document\}\s*$/) {
 				$beforeBeginDocumentBool = 0;
 				$newFile .= $line . "\n";
 				goto INITLINE;
@@ -648,6 +716,9 @@ sub removeMacros {
 		INITLINE:
 			$line="";
 			$prev_empty = $this_empty;
+			next;
+		WEITERLINE:
+			$line.="\n";
 			next;
 	}
 	return $newFile;
